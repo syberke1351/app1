@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator, Dimensions } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { ArrowLeft, Play, Pause, Bookmark, BookmarkCheck, Volume2 } from 'lucide-react-native';
+import { ArrowLeft, Play, Pause, Bookmark, BookmarkCheck, Volume2, Eye } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Audio } from 'expo-av';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import Animated, { FadeInDown, FadeInUp } from 'react-native-reanimated';
+import { ReadingHistoryService } from '@/services/readingHistory';
 
 const router = useRouter();
 
@@ -51,6 +52,7 @@ export default function QuranDetailScreen() {
   const [currentAyah, setCurrentAyah] = useState<number | null>(null);
   const [bookmarkedAyahs, setBookmarkedAyahs] = useState<number[]>([]);
   const [selectedReciter, setSelectedReciter] = useState<'01' | '02' | '03'>('01');
+  const [lastReadAyah, setLastReadAyah] = useState<number>(1);
 
   const reciters = {
     '01': 'Mishary Rashid Alafasy',
@@ -157,9 +159,41 @@ export default function QuranDetailScreen() {
     }
   };
 
+  const updateReadingHistory = async (ayahNumber: number) => {
+    if (!user || !surahDetail) return;
+
+    try {
+      await ReadingHistoryService.updateProgress(
+        user.id,
+        surahDetail.nomor,
+        surahDetail.namaLatin,
+        ayahNumber,
+        surahDetail.jumlahAyat
+      );
+      
+      setLastReadAyah(ayahNumber);
+    } catch (error) {
+      console.error('Error updating reading history:', error);
+    }
+  };
+
+  const markAsRead = (ayahNumber: number) => {
+    updateReadingHistory(ayahNumber);
+  };
+
   useEffect(() => {
     fetchSurahDetail();
     fetchBookmarks();
+    
+    // Load reading progress for this surah
+    if (user && nomor) {
+      ReadingHistoryService.getSurahProgress(user.id, parseInt(nomor as string))
+        .then(progress => {
+          if (progress) {
+            setLastReadAyah(progress.last_ayah);
+          }
+        });
+    }
 
     return () => {
       if (sound) {
@@ -273,6 +307,12 @@ export default function QuranDetailScreen() {
                     <Play size={16} color="#10B981" />
                   )}
                 </Pressable>
+                <Pressable
+                  style={[styles.actionButton, lastReadAyah >= ayah.nomorAyat && styles.actionButtonRead]}
+                  onPress={() => markAsRead(ayah.nomorAyat)}
+                >
+                  <Eye size={16} color={lastReadAyah >= ayah.nomorAyat ? "#10B981" : "#9CA3AF"} />
+                </Pressable>
               </View>
             </View>
 
@@ -281,6 +321,21 @@ export default function QuranDetailScreen() {
             <Text style={styles.translationText}>{ayah.teksIndonesia}</Text>
           </Animated.View>
         ))}
+        
+        {/* Reading Progress Indicator */}
+        <View style={styles.progressIndicator}>
+          <Text style={styles.progressText}>
+            Progress Bacaan: {Math.round((lastReadAyah / surahDetail.jumlahAyat) * 100)}%
+          </Text>
+          <View style={styles.progressBar}>
+            <View 
+              style={[
+                styles.progressFill, 
+                { width: `${(lastReadAyah / surahDetail.jumlahAyat) * 100}%` }
+              ]} 
+            />
+          </View>
+        </View>
       </ScrollView>
     </View>
   );
@@ -456,6 +511,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  actionButtonRead: {
+    backgroundColor: '#DCFCE7',
+  },
   arabicText: {
     fontSize: 24,
     lineHeight: 40,
@@ -475,5 +533,34 @@ const styles = StyleSheet.create({
     fontSize: 16,
     lineHeight: 24,
     color: '#374151',
+  },
+  progressIndicator: {
+    backgroundColor: 'white',
+    margin: 16,
+    padding: 20,
+    borderRadius: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 5,
+  },
+  progressText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#1F2937',
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  progressBar: {
+    height: 8,
+    backgroundColor: '#E5E7EB',
+    borderRadius: 4,
+    overflow: 'hidden',
+  },
+  progressFill: {
+    height: '100%',
+    backgroundColor: '#10B981',
+    borderRadius: 4,
   },
 });

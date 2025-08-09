@@ -6,6 +6,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 import Animated, { FadeInDown, FadeInUp, SlideInRight } from 'react-native-reanimated';
 import React, { useEffect, useState } from 'react';
+import { ReadingHistoryService } from '@/services/readingHistory';
 import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View, TextInput, ScrollView, Dimensions } from 'react-native';
 
 const { width } = Dimensions.get('window');
@@ -167,7 +168,10 @@ export default function SurahListScreen() {
         styles.card,
         pressed && { backgroundColor: '#D1FAE5' },
       ]}
-      onPress={() => router.push(`./equran.tsx?nomor=${item.nomor}`)}
+      onPress={() => {
+        updateReadingHistory(item.nomor, item.namaLatin, 1, item.jumlahAyat);
+        router.push(`/(tabs)/equran?nomor=${item.nomor}`);
+      }}
 
     >
       <View style={styles.left}>
@@ -197,7 +201,10 @@ export default function SurahListScreen() {
     return (
       <Pressable
         style={styles.bookmarkCard}
-        onPress={() => router.push(`/(tabs)/equran?nomor=${item.surah_number}`)}
+        onPress={() => {
+          updateReadingHistory(item.surah_number, surah.namaLatin, item.ayah_number, surah.jumlahAyat);
+          router.push(`/(tabs)/equran?nomor=${item.surah_number}`);
+        }}
       >
         <View style={styles.bookmarkHeader}>
           <Text style={styles.bookmarkSurah}>{surah.namaLatin}</Text>
@@ -211,6 +218,22 @@ export default function SurahListScreen() {
         </Text>
       </Pressable>
     );
+  };
+
+  const updateReadingHistory = async (surahNumber: number, surahName: string, ayahNumber: number, totalAyahs: number) => {
+    if (!user) return;
+
+    try {
+      await ReadingHistoryService.updateProgress(
+        user.id,
+        surahNumber,
+        surahName,
+        ayahNumber,
+        totalAyahs
+      );
+    } catch (error) {
+      console.error('Error updating reading history:', error);
+    }
   };
 
   const nextPrayer = getNextPrayer();
@@ -289,13 +312,19 @@ export default function SurahListScreen() {
 
       {/* Content based on active tab */}
       {activeTab === 'surah' && (
-        <FlatList
-          data={filteredSurahList}
-          keyExtractor={(item) => item.nomor.toString()}
-          renderItem={renderSurahItem}
-          contentContainerStyle={{ padding: 8, paddingBottom: 24 }}
-          showsVerticalScrollIndicator={false}
-        />
+        <View style={{ flex: 1 }}>
+          <FlatList
+            data={filteredSurahList}
+            keyExtractor={(item) => item.nomor.toString()}
+            renderItem={({ item, index }) => (
+              <Animated.View entering={FadeInDown.delay(index * 50)}>
+                {renderSurahItem({ item })}
+              </Animated.View>
+            )}
+            contentContainerStyle={{ padding: 8, paddingBottom: 24 }}
+            showsVerticalScrollIndicator={false}
+          />
+        </View>
       )}
 
       {activeTab === 'bookmarks' && (
